@@ -40,6 +40,22 @@ def class_list_for_subject(subject):
 
 
 def course_detail(cid):
+    tbl_fields_to_scrape = [
+        'ID #',
+        'Subj',
+        '#',
+        'Sec',
+        'Title',
+        'Dates',
+        'Days',
+        'Time',
+        'Crds',
+        'Status',
+        'Instructor',
+        'Delivery Method',
+        'Loc'
+    ]
+
     def parse_size_cap(element):
         return int(element.getparent().text_content().split(':')[1].strip())
 
