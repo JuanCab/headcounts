@@ -18,22 +18,8 @@ def get_subject_list():
 
 def class_list_for_subject(subject):
     list_url = SUBJECT_SEARCH_URL.format(subj=subject)
-    #print "Starting request"
     result = requests.get(list_url)
-    #print "Got request"
-    #print result.text
-    #print result.encoding
-    tree = BeautifulSoup(result.text)
-    #print(tree.prettify('ascii'))
-    table = tree.find(id="resultsTable")
-    #print table
-    rows = table.find_all('tr')
-    #print len(rows)
-    for row in rows:
-        #print row
-        pass
     lxml_parsed = lxml.html.fromstring(result.text)
-    #print lxml.html.tostring(lxml_parsed)
     foo = lxml_parsed.findall('.//tbody/tr/td[2]')
     course_ids = [f.text.strip() for f in foo]
     return course_ids
@@ -61,7 +47,6 @@ def course_detail(cid):
 
     course_url = COURSE_DETAIL_URL.format(course_id=cid)
     result = requests.get(course_url)
-    #print result.text
     lxml_parsed = lxml.html.fromstring(result.text)
 
     detail_table_header = lxml_parsed.xpath('.//table[@summary="Course Detail"]//th//text()')
