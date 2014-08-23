@@ -1,11 +1,20 @@
+import re
+import os
+
 import requests
 from bs4 import BeautifulSoup
 import lxml.html
+import numpy as np
+
+from astropy.table import Table, Column, vstack
 
 URL_ROOT = 'https://webproc.mnscu.edu/registration/search/basic.html?campusid=072'
 SUBJECT_SEARCH_URL = 'https://webproc.mnscu.edu/registration/search/advancedSubmit.html?campusid=072&searchrcid=0072&searchcampusid=072&yrtr=20153&subject={subj}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
 COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr=20153&rcid=0072&localrcid=0072&partnered=false&parent=search'
 
+SIZE_KEYS = ['Size', 'Enrolled']
+
+DESTINATION_DIR = 'results'
 
 def get_subject_list():
     result = requests.get(URL_ROOT)
@@ -16,13 +25,37 @@ def get_subject_list():
     return subject_str
 
 
+def decrap_item(item):
+    remove_nbsp = item.encode('ascii', errors='ignore')
+    no_linebreaks = remove_nbsp.replace('\n', '')
+    no_linebreaks = no_linebreaks.replace('\r', '')
+    no_tabs = no_linebreaks.replace('\t', '')
+    less_spaces = re.sub('\s+', ' ', no_tabs)
+    return less_spaces.strip()
+
+
 def class_list_for_subject(subject):
     list_url = SUBJECT_SEARCH_URL.format(subj=subject)
     result = requests.get(list_url)
     lxml_parsed = lxml.html.fromstring(result.text)
+    #print result.text
     foo = lxml_parsed.findall('.//tbody/tr/td[2]')
     course_ids = [f.text.strip() for f in foo]
-    return course_ids
+    results = lxml_parsed.findall(".//table[@id='resultsTable']")[0]
+    headers = results.findall('.//th')
+    header_list = [decrap_item(h.text_content()) for h in headers[1:]]
+    hrows = results.findall('.//tbody/tr')
+    table = Table()
+    for h in header_list:
+        table.add_column(Column(name=h, dtype='S200'))
+    data = []
+    for row in hrows:
+        cols = row.findall('td')
+        #print repr(cols[6].text_content())
+        dat = [decrap_item(c.text_content()) for c in cols[1:]]
+        data.append(dat)
+        table.add_row(dat)
+    return table
 
 
 def course_detail(cid):
@@ -49,26 +82,43 @@ def course_detail(cid):
     result = requests.get(course_url)
     lxml_parsed = lxml.html.fromstring(result.text)
 
-    detail_table_header = lxml_parsed.xpath('.//table[@summary="Course Detail"]//th//text()')
-    print detail_table_header
-    detail_table_data = lxml_parsed.xpath('.//table[@summary="Course Detail"]//td')
-    for d in detail_table_data[1:]:
-        print d.text_content().strip()
-    for h, d in zip(detail_table_header, detail_table_data[1:]):
-        print h.strip(), ' '.join(d.text_content().strip().split())
+    if 'System Error' in result.text:
+        print "Errored on {}".format(cid)
+        return {k: -1 for k in SIZE_KEYS}
 
     xpath_expr = './/*[contains(text(), $key)]'
-    to_get = {'Size': None, 'Enrolled': None}
+    to_get = {k: None for k in SIZE_KEYS}
+    #print course_url
     for key in to_get.keys():
         foo = lxml_parsed.xpath(xpath_expr, key=key)
+        #print foo
         to_get[key] = parse_size_cap(foo[0])
-    print cid, to_get
-
+    #print cid, to_get
+    return to_get
 
 if __name__ == '__main__':
     subjects = get_subject_list()
     #print "Trying {}".format(subjects[0])
-    IDs = class_list_for_subject('ART')
-    for an_id in IDs[0:1]:
-        print "On ID: {}".format(an_id)
-        course_detail(an_id)
+    overall_table = None
+    for subject in subjects:
+        if subject != 'MATH':
+            pass
+        print "On subject {}".format(subject)
+        table = class_list_for_subject(subject)
+        IDs = table['ID #']
+        results = {k: [] for k in SIZE_KEYS}
+        for an_id in IDs:
+            #print "On ID: {}".format(an_id)
+            size_info = course_detail(an_id)
+            for k, v in size_info.iteritems():
+                results[k].append(v)
+        #print results
+        for k, v in results.iteritems():
+            table.add_column(Column(name=k, data=v, dtype=np.int), index=8)
+        if not overall_table:
+            overall_table = table
+        else:
+            overall_table = vstack([overall_table, table])
+        table.write(os.path.join(DESTINATION_DIR, subject+'.csv'))
+    print table
+    overall_table.write('all_enrollments.csv')
