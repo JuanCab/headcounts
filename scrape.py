@@ -120,5 +120,4 @@ if __name__ == '__main__':
         else:
             overall_table = vstack([overall_table, table])
         table.write(os.path.join(DESTINATION_DIR, subject+'.csv'))
-    print table
     overall_table.write('all_enrollments.csv')
