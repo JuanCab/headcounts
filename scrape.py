@@ -1,5 +1,6 @@
 import re
 import os
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -107,14 +108,17 @@ if __name__ == '__main__':
         table = class_list_for_subject(subject)
         IDs = table['ID #']
         results = {k: [] for k in SIZE_KEYS}
+        timestamps = []
         for an_id in IDs:
             #print "On ID: {}".format(an_id)
             size_info = course_detail(an_id)
             for k, v in size_info.iteritems():
                 results[k].append(v)
+            timestamps.append(time.time())
         #print results
         for k, v in results.iteritems():
             table.add_column(Column(name=k, data=v, dtype=np.int), index=8)
+        table.add_column(Column(name='timestamp', data=timestamps))
         if not overall_table:
             overall_table = table
         else:
