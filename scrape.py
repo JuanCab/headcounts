@@ -1,6 +1,7 @@
 import re
 import os
 import time
+import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,7 +16,7 @@ COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?c
 
 SIZE_KEYS = ['Size', 'Enrolled']
 
-DESTINATION_DIR = 'results'
+DESTINATION_DIR_BASE = 'results'
 
 def get_subject_list():
     result = requests.get(URL_ROOT)
@@ -101,6 +102,15 @@ if __name__ == '__main__':
     subjects = get_subject_list()
     #print "Trying {}".format(subjects[0])
     overall_table = None
+    now = time.localtime()
+    formatted_datetime = datetime.datetime(*now[:-3]).isoformat()
+    formatted_datetime = formatted_datetime.replace(':', '-')
+    destination = '-'.join([DESTINATION_DIR_BASE, formatted_datetime])
+    try:
+        os.makedirs(destination)
+    except OSError:
+        raise OSError('Destination folder %s already exists' % destination)
+
     for subject in subjects:
         if subject != 'MATH':
             pass
@@ -123,5 +133,5 @@ if __name__ == '__main__':
             overall_table = table
         else:
             overall_table = vstack([overall_table, table])
-        table.write(os.path.join(DESTINATION_DIR, subject+'.csv'))
-    overall_table.write('all_enrollments.csv')
+        table.write(os.path.join(destination, subject+'.csv'))
+    overall_table.write(os.path.join(destination, 'all_enrollments.csv'))
