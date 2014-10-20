@@ -2,6 +2,7 @@ import re
 import os
 import time
 import datetime
+import argparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -11,18 +12,18 @@ import numpy as np
 from astropy.table import Table, Column, vstack
 
 URL_ROOT = 'https://webproc.mnscu.edu/registration/search/basic.html?campusid=072'
-SUBJECT_SEARCH_URL = 'https://webproc.mnscu.edu/registration/search/advancedSubmit.html?campusid=072&searchrcid=0072&searchcampusid=072&yrtr=20153&subject={subj}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
-COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr=20153&rcid=0072&localrcid=0072&partnered=false&parent=search'
+SUBJECT_SEARCH_URL = 'https://webproc.mnscu.edu/registration/search/advancedSubmit.html?campusid=072&searchrcid=0072&searchcampusid=072&yrtr={year_term}&subject={subj}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
+COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr={year_term}&rcid=0072&localrcid=0072&partnered=false&parent=search'
 
 SIZE_KEYS = ['Size', 'Enrolled']
 
 DESTINATION_DIR_BASE = 'results'
 
-def get_subject_list():
+def get_subject_list(year_term):
     result = requests.get(URL_ROOT)
     soup = BeautifulSoup(result.text)
     select_box = soup.find('select', id='subject')
-    subjects = select_box.find_all('option', class_="20153")
+    subjects = select_box.find_all('option', class_=year_term)
     subject_str = [s['value'] for s in subjects]
     return subject_str
 
@@ -36,8 +37,8 @@ def decrap_item(item):
     return less_spaces.strip()
 
 
-def class_list_for_subject(subject):
-    list_url = SUBJECT_SEARCH_URL.format(subj=subject)
+def class_list_for_subject(subject, year_term='20153'):
+    list_url = SUBJECT_SEARCH_URL.format(subj=subject, year_term=year_term)
     result = requests.get(list_url)
     lxml_parsed = lxml.html.fromstring(result.text)
     #print result.text
@@ -60,7 +61,7 @@ def class_list_for_subject(subject):
     return table
 
 
-def course_detail(cid):
+def course_detail(cid, year_term='20155'):
     tbl_fields_to_scrape = [
         'ID #',
         'Subj',
@@ -80,7 +81,7 @@ def course_detail(cid):
     def parse_size_cap(element):
         return int(element.getparent().text_content().split(':')[1].strip())
 
-    course_url = COURSE_DETAIL_URL.format(course_id=cid)
+    course_url = COURSE_DETAIL_URL.format(course_id=cid, year_term=year_term)
     result = requests.get(course_url)
     lxml_parsed = lxml.html.fromstring(result.text)
 
@@ -99,7 +100,13 @@ def course_detail(cid):
     return to_get
 
 if __name__ == '__main__':
-    subjects = get_subject_list()
+    parser = argparse.ArgumentParser(description='Scrape enrollment numbers '
+                                     'from public MnSCU search site')
+    parser.add_argument('year_term', help='Code for year/term, a 5 digit '
+                        'number like 20155 (spring of 2015)')
+    args = parser.parse_args()
+
+    subjects = get_subject_list(args.year_term)
     #print "Trying {}".format(subjects[0])
     overall_table = None
     now = time.localtime()
@@ -115,13 +122,13 @@ if __name__ == '__main__':
         if subject != 'MATH':
             pass
         print "On subject {}".format(subject)
-        table = class_list_for_subject(subject)
+        table = class_list_for_subject(subject, year_term=args.year_term)
         IDs = table['ID #']
         results = {k: [] for k in SIZE_KEYS}
         timestamps = []
         for an_id in IDs:
             #print "On ID: {}".format(an_id)
-            size_info = course_detail(an_id)
+            size_info = course_detail(an_id, year_term=args.year_term)
             for k, v in size_info.iteritems():
                 results[k].append(v)
             timestamps.append(time.time())
@@ -129,6 +136,9 @@ if __name__ == '__main__':
         for k, v in results.iteritems():
             table.add_column(Column(name=k, data=v, dtype=np.int), index=8)
         table.add_column(Column(name='timestamp', data=timestamps))
+        if len(table):
+            table.add_column(Column(name='year_term',
+                                    data=[str(args.year_term)] * len(table)))
         if not overall_table:
             overall_table = table
         else:
