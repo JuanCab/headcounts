@@ -19,6 +19,10 @@ SIZE_KEYS = ['Size', 'Enrolled']
 
 DESTINATION_DIR_BASE = 'results'
 
+# Name of symlink to create to most recent scrape
+LATEST = 'latest'
+
+
 def get_subject_list(year_term):
     result = requests.get(URL_ROOT)
     soup = BeautifulSoup(result.text)
@@ -145,3 +149,9 @@ if __name__ == '__main__':
             overall_table = vstack([overall_table, table])
         table.write(os.path.join(destination, subject+'.csv'))
     overall_table.write(os.path.join(destination, 'all_enrollments.csv'))
+    try:
+        os.remove(LATEST)
+    except OSError:
+        # Not a problem if it doesn't already exist.
+        pass
+    os.symlink(destination, LATEST)
