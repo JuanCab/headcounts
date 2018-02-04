@@ -18,7 +18,7 @@ URL_ROOT = 'https://webproc.mnscu.edu/registration/search/basic.html?campusid=07
 SUBJECT_SEARCH_URL = 'https://webproc.mnscu.edu/registration/search/advancedSubmit.html?campusid=072&searchrcid=0072&searchcampusid=072&yrtr={year_term}&subject={subj}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
 COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr={year_term}&rcid=0072&localrcid=0072&partnered=false&parent=search'
 
-SIZE_KEYS = ['Enrolled', 'Size']
+SIZE_KEYS = ['Enrolled', 'Size:']
 
 TUITION_COURSE_KEYS = [
     'Tuition -resident',
@@ -147,42 +147,18 @@ def get_location(loc):
     return '\n'.join(locations)
 
 
-def class_list_for_subject(subject, year_term='20153'):
+def scrape_class_data_from_results_table(page_content, page_type='search'):
     """
-    Return a table with one row for each class offered in a subject (aka
-    course rubric).
-
-    Parameters
-    ----------
-
-    subject : str
-        The course rubric (aka subject) for which the list of courses is
-        desired. Examples are PHYS, ED, ART...
-
-    year_term: str, optional
-        The year/term in "fiscal year" notation. See the documentation for
-        ``get_subject_list`` for a description of that notation.
-
-    Returns
-    -------
-
-    astropy.table.Table
-        Table with one column for each column in the search results in which
-        each row is one course.
+    Given the html content of either a course search result page or
+    an individual course page, scrape the useful data from the table.
     """
-
-    # Get and parse the course list for this subject
-    list_url = SUBJECT_SEARCH_URL.format(subj=subject, year_term=year_term)
-    result = requests.get(list_url)
-    lxml_parsed = lxml.html.fromstring(result.text)
-
-    # Find all instances of the second column, which is the column with course ID
-    # number in it.
-    foo = lxml_parsed.findall('.//tbody/tr/td[2]')
-    course_ids = [f.text.strip() for f in foo]
+    lxml_parsed = lxml.html.fromstring(page_content)
 
     # Grab the table of results...
-    results = lxml_parsed.findall(".//table[@id='resultsTable']")[0]
+    if page_type == 'search':
+        results = lxml_parsed.findall(".//table[@id='resultsTable']")[0]
+    else:
+        results = lxml_parsed.findall(".//table[@class='myplantable']")[0]
 
     # ...and then the headers for that table, to use as column names later...
     headers = results.findall('.//th')
@@ -216,10 +192,52 @@ def class_list_for_subject(subject, year_term='20153'):
 
     # Yay stackoverflow: https://stackoverflow.com/a/6473724/3486425
     data = list(map(list, zip(*data)))
+
+    if not data:
+        # So apparently a subject which has no courses can be listed...
+        return None
+
     table = Table(data=data,
                   names=header_list,
                   dtype=['S200'] * len(header_list))
     return table
+
+
+def class_list_for_subject(subject, year_term='20153'):
+    """
+    Return a table with one row for each class offered in a subject (aka
+    course rubric).
+
+    Parameters
+    ----------
+
+    subject : str
+        The course rubric (aka subject) for which the list of courses is
+        desired. Examples are PHYS, ED, ART...
+
+    year_term: str, optional
+        The year/term in "fiscal year" notation. See the documentation for
+        ``get_subject_list`` for a description of that notation.
+
+    Returns
+    -------
+
+    astropy.table.Table
+        Table with one column for each column in the search results in which
+        each row is one course.
+    """
+
+    # Get and parse the course list for this subject
+    list_url = SUBJECT_SEARCH_URL.format(subj=subject, year_term=year_term)
+    result = requests.get(list_url)
+    return scrape_class_data_from_results_table(result.text)
+
+
+def class_list_for_cid(cid, year_term):
+    course_url = COURSE_DETAIL_URL.format(course_id=cid, year_term=year_term)
+    result = requests.get(course_url)
+    return scrape_class_data_from_results_table(result.text,
+                                                page_type='detail')
 
 
 def course_detail(cid, year_term='20155'):
@@ -323,12 +341,33 @@ def course_detail(cid, year_term='20155'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scrape enrollment numbers '
                                      'from public MnSCU search site')
-    parser.add_argument('year_term', help='Code for year/term, a 5 digit '
+    parser.add_argument('--year-term',action='store',
+                        help='Code for year/term, a 5 digit '
                         'number like 20155 (spring of 2015)')
+    parser.add_argument('--cid-list', action='store',
+                        help='CSV that has at least two columns, "ID #", a '
+                        'course ID number, and "year_term" a year/term code.')
     args = parser.parse_args()
 
-    # Grab the list of subjects for this year/term
-    subjects = get_subject_list(args.year_term)
+    year_term = args.year_term
+    cid_list = args.cid_list
+
+    if year_term and cid_list:
+        raise RuntimeError('Can only use one of --year-term and --cid-list')
+    elif not (year_term or cid_list):
+        raise RuntimeError('Must use exactly one of --year-term and --cid-list')
+    print(year_term)
+
+    if year_term:
+        # Grab the list of subjects for this year/term
+        subjects = get_subject_list(args.year_term)
+        source_list = subjects
+
+    if cid_list:
+        inp_data = Table.read(cid_list)
+        cids = inp_data['ID #']
+        year_terms = inp_data['year_term']
+        source_list = [('{:06d}'.format(int(c)), str(y)) for c, y in zip(cids, year_terms)]
 
     # print "Trying {}".format(subjects[0])
     overall_table = None
@@ -345,21 +384,37 @@ if __name__ == '__main__':
     except OSError:
         raise OSError('Destination folder %s already exists' % destination)
 
-    subject_paths = []
+    temp_paths = []
+    bads = []
     # Process each course rubric (aka subject)
-    for subject in subjects:
-        print("On subject {}".format(subject))
+    for source in source_list:
+        print("On source {}".format(source))
 
         # Pull list of classes for subject. Note that this is the table
         # from which most of the course information is derived.
-        table = class_list_for_subject(subject, year_term=args.year_term)
+        try:
+            if year_term:
+                table = class_list_for_subject(source, year_term=year_term)
+            elif cid_list:
+                table = class_list_for_cid(source[0], source[1])
+        except IndexError:
+            bads.append(source)
+            print("     Failed!")
+            continue
+
+        if not table:
+            # This can happen, for example, if there are no courses listed
+            # for a subject...
+            continue
+
         IDs = table['ID #']
         results = defaultdict(list)
         timestamps = []
 
+        use_year_term = year_term or source[1]
         # Obtain the enrollment and enrollment cap, and add a timestamp.
         for an_id in IDs:
-            size_info = course_detail(an_id, year_term=args.year_term)
+            size_info = course_detail(an_id, year_term=use_year_term)
             for k, v in size_info.iteritems():
                 results[k].append(v)
             timestamps.append(time.time())
@@ -377,7 +432,7 @@ if __name__ == '__main__':
         # Add a year_term column to the table
         if len(table):
             table.add_column(Column(name='year_term',
-                                    data=[str(args.year_term)] * len(table)))
+                                    data=[str(use_year_term)] * len(table)))
 
         # Add the table to the overall table...
         if not overall_table:
@@ -387,9 +442,10 @@ if __name__ == '__main__':
 
         # ...but also write out this individual table in case we have a
         # failure along the way.
-        subject_file = subject + '.csv'
-        table.write(os.path.join(destination, subject_file))
-        subject_paths.append(os.path.join(destination, subject_file))
+        temp_file = '-'.join(source) + '.csv'
+
+        table.write(os.path.join(destination, temp_file))
+        temp_paths.append(os.path.join(destination, temp_file))
 
     # Write out a file for the overall (i.e. all subjects) table.
     overall_table.write(os.path.join(destination, 'all_enrollments.csv'))
@@ -400,7 +456,7 @@ if __name__ == '__main__':
     if len(from_disk) != len(overall_table):
         raise RuntimeError('Enrollment data did not properly write to disk!')
 
-    for path in subject_paths:
+    for path in temp_paths:
         os.remove(path)
 
     # symlink LATEST to this run of the scraper.
