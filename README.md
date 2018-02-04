@@ -32,6 +32,32 @@ optional arguments:
                         number, and "year_term" a year/term code.
 ```
 
+# How do I get course information for past semesters?
+
+This involves two steps:
+
+1. Get a list of all of the course ID numbers used for a particular semester.
+2. Scrape the data for each of those courses.
+
+Though one could imagine doing a data request to the course ID numbers it turns out to be reasonably easy to simply try all course ID numbers up to some maximum (the default is 4000) and see which do not return errors.
+
+The script `get_cids.py` does that. Its usage is:
+
+```
+$ python get_cids.py --help
+
+usage: get_cids.py [-h] [--year-term YEAR_TERM] [--max-cid MAX_CID]
+
+Discover CID numbers
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --year-term YEAR_TERM
+                        Code for year/term, a 5 digit number like 20155
+                        (spring of 2015)
+  --max-cid MAX_CID     The largest course ID number to look for.
+```
+
 # Does this work for other campuses besides Minnesota State University Moorhead?
 
 Not at the moment, though I would merge a pull request that added that
