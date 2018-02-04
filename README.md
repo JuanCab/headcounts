@@ -3,8 +3,7 @@
 The MinnState system of colleges and universities (neé MnSCU) maintains a
 searchable listing of course subjects for the current, one past and one future
 semester at [https://eservices.minnstate.edu/registration/search/basic.html?ca
-mpusid=072](https://eservices.minnstate.edu/registration/search/basic.html?cam
-pusid=072).
+mpusid=072](https://eservices.minnstate.edu/registration/search/basic.html?campusid=072).
 
 Detail on individual courses is also available by subject and/or course ID.
 
