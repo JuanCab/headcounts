@@ -1,13 +1,10 @@
-from __future__ import print_function
-
-import sys
 import time
 import datetime
 import argparse
 
 import requests
 
-from astropy.table import Table, Column, vstack
+from astropy.table import Table
 
 from scrape import COURSE_DETAIL_URL
 
