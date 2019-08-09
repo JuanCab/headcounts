@@ -415,7 +415,7 @@ if __name__ == '__main__':
         # Obtain the enrollment and enrollment cap, and add a timestamp.
         for an_id in IDs:
             size_info = course_detail(an_id, year_term=use_year_term)
-            for k, v in size_info.iteritems():
+            for k, v in size_info.items():
                 results[k].append(v)
             timestamps.append(time.time())
 
