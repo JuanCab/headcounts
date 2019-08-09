@@ -11,7 +11,7 @@ from astropy.table import Table, Column, vstack
 
 from scrape import COURSE_DETAIL_URL
 
-COURSE_DETAIL_URL = 'https://webproc.mnscu.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr={year_term}&rcid=0072&localrcid=0072&partnered=false&parent=search'
+COURSE_DETAIL_URL = 'https://eservices.minnstate.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr={year_term}&rcid=0072&localrcid=0072&partnered=false&parent=search'
 
 
 def class_exists_for_cid(cid, year_term):
@@ -40,13 +40,20 @@ if __name__ == '__main__':
     formatted_datetime = formatted_datetime.replace(':', '-')
 
     good_cids = []
+    print(f'Working on {year_term}...', flush=True)
     for cid in range(1, int(max_cid) + 1):
         cid_str = '{:06d}'.format(cid)
-        print('Checking {}\r'.format(cid_str), end='')
-        sys.stdout.flush()
-        if class_exists_for_cid(cid_str, year_term):
-            good_cids.append(cid_str)
-    print('Total of {} good CIDs found'.format(len(good_cids)))
+        print(f'    Checking {cid_str}\r', end='', flush=True)
+        failed = True
+        while failed:
+            try:
+                if class_exists_for_cid(cid_str, year_term):
+                    good_cids.append(cid_str)
+            except requests.exceptions.ConnectionError:
+                pass
+            else:
+                failed = False
+    print(f'Total of {len(good_cids)} good CIDs found')
     if good_cids:
         results = Table(data=[good_cids, [year_term] * len(good_cids)],
                         names=['ID #', 'year_term'])
