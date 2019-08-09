@@ -62,6 +62,7 @@ EXTRA_COLUMNS = [
     TUITION_COURSE_KEYS[2],  # Non-resident tuition
 ]
 
+
 def lasc_area_label(full_name):
     """
     Return just the area number/letter from the full name that appears
@@ -345,7 +346,7 @@ def course_detail(cid, year_term='20155'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scrape enrollment numbers '
                                      'from public MnSCU search site')
-    parser.add_argument('--year-term',action='store',
+    parser.add_argument('--year-term', action='store',
                         help='Code for year/term, a 5 digit '
                         'number like 20155 (spring of 2015)')
     parser.add_argument('--cid-list', action='store',
@@ -357,9 +358,11 @@ if __name__ == '__main__':
     cid_list = args.cid_list
 
     if year_term and cid_list:
-        raise RuntimeError('Can only use one of --year-term and --cid-list')
+        raise RuntimeError('Can only use one of '
+                           '--year-term and --cid-list')
     elif not (year_term or cid_list):
-        raise RuntimeError('Must use exactly one of --year-term and --cid-list')
+        raise RuntimeError('Must use exactly one of '
+                           '--year-term and --cid-list')
     print(year_term)
 
     if year_term:
@@ -371,7 +374,8 @@ if __name__ == '__main__':
         inp_data = Table.read(cid_list)
         cids = inp_data['ID #']
         year_terms = inp_data['year_term']
-        source_list = [('{:06d}'.format(int(c)), str(y)) for c, y in zip(cids, year_terms)]
+        source_list = [('{:06d}'.format(int(c)), str(y)) for
+                       c, y in zip(cids, year_terms)]
 
     # print "Trying {}".format(subjects[0])
     overall_table = None

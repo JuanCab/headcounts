@@ -19,7 +19,7 @@ def class_exists_for_cid(cid, year_term):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Discover CID numbers')
-    parser.add_argument('--year-term',action='store',
+    parser.add_argument('--year-term', action='store',
                         help='Code for year/term, a 5 digit '
                         'number like 20155 (spring of 2015)')
     parser.add_argument('--max-cid', action='store', default=4000,
