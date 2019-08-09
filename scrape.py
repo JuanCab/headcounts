@@ -99,7 +99,7 @@ def get_subject_list(year_term):
         List of course rubrics as strings.
     """
     result = requests.get(URL_ROOT)
-    soup = BeautifulSoup(result.text)
+    soup = BeautifulSoup(result.text, "lxml")
     select_box = soup.find('select', id='subject')
     subjects = select_box.find_all('option', class_=year_term)
     subject_str = [s['value'] for s in subjects]
@@ -118,7 +118,7 @@ def decrap_item(item):
     item : str
         The raw item scraped from the web page.
     """
-    remove_nbsp = item.encode('ascii', errors='ignore')
+    remove_nbsp = item.encode('ascii', errors='ignore').decode()
     no_linebreaks = remove_nbsp.replace('\n', '')
     no_linebreaks = no_linebreaks.replace('\r', '')
     no_tabs = no_linebreaks.replace('\t', '')
@@ -162,7 +162,12 @@ def scrape_class_data_from_results_table(page_content, page_type='search'):
 
     # ...and then the headers for that table, to use as column names later...
     headers = results.findall('.//th')
-    header_list = [decrap_item(h.text_content()) for h in headers[1:]]
+
+    # For reasons I do not understand, the first header, which contains an
+    # image, is no longer picked up in headers. It used to be trimmed
+    # out here by slicing headers[1:], but that no longer seems necessary.
+    # Not happy that I have absolutely no idea why...
+    header_list = [decrap_item(h.text_content()) for h in headers]
 
     # ...and finally grab all of the rows in the table.
     hrows = results.findall('.//tbody/tr')
@@ -325,7 +330,7 @@ def course_detail(cid, year_term='20155'):
     # we need, which is sandwiched between two divs that contain text that is
     # easy to find? Note the actual text is not in any element, not even a <p>.
     all_the_text = lxml_parsed.text_content()
-    matches = re.search('.*Course Level\s+(\w+)\s+(Description|General/Liberal|Lectures/Labs|Corequisites|Add To Wait List)',
+    matches = re.search('.*Course Level\s+(\w+)\s+(Description|General/Liberal|Lectures/Labs|Corequisites|Add To Wait List|Minnesota Transfer Curriculum Goal|Non-Course Prerequisites)',
                         all_the_text)
 
     # Oh ha, ha, turns out any number of things can follow Course Level.
@@ -333,7 +338,8 @@ def course_detail(cid, year_term='20155'):
         to_get[COURSE_LEVEL] = matches.groups(1)[0]
     else:
         to_get[COURSE_LEVEL] = 'Unknown'
-        raise RuntimeError
+        raise RuntimeError('Failed to find "Course Level" '
+                           'in URL {}'.format(course_url))
 
     return to_get
 
