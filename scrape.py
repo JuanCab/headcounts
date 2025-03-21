@@ -3,6 +3,7 @@ import os
 import time
 import datetime
 import argparse
+from pathlib import Path
 from collections import defaultdict
 
 import requests
@@ -12,11 +13,27 @@ import numpy as np
 
 from astropy.table import Table, Column, vstack
 
-URL_ROOT = 'https://eservices.minnstate.edu/registration/search/basic.html?campusid=072'
-SUBJECT_SEARCH_URL = 'https://eservices.minnstate.edu/registration/search/advancedSubmit.html?campusid=072&searchrcid=0072&searchcampusid=072&yrtr={year_term}&subject={subj}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
-COURSE_DETAIL_URL = 'https://eservices.minnstate.edu/registration/search/detail.html?campusid=072&courseid={course_id}&yrtr={year_term}&rcid=0072&localrcid=0072&partnered=false&parent=search'
+# The URLs below have a few parameters that need to be substituted to make
+# them useful. Those parameters are:
+#
+#   year_term -- see argument definition at end of this file
+#   campus_id -- see argument definition at end of this file
+#   subject -- see argument definition at end of this file
+#   course_id -- Course ID number
+#
+# Not all URLS use all of these parameters, but putting them all into
+# a dict makes it easy to pass around and to .format the strings.
+#
+URL_COMMON_ROOT = 'https://eservices.minnstate.edu/registration/search/'
+URL_ROOT = URL_COMMON_ROOT + 'basic.html?campusid={campus_id:03}'
+SUBJECT_SEARCH_URL = URL_COMMON_ROOT + 'advancedSubmit.html?campusid={campus_id:03}&searchrcid={campus_id:04}&searchcampusid={campus_id:03}&yrtr={year_term}&subject={subject}&courseNumber=&courseId=&openValue=ALL&showAdvanced=&delivery=ALL&starttime=&endtime=&mntransfer=&gened=&credittype=ALL&credits=&instructor=&keyword=&begindate=&site=&resultNumber=250'
+COURSE_DETAIL_URL = URL_COMMON_ROOT + 'detail.html?campusid={campus_id:03}&courseid={course_id}&yrtr={year_term}&rcid={campus_id:04}&localrcid={campus_id:04}&partnered=false&parent=search'
 
-SIZE_KEYS = ['Enrolled', 'Size:']
+# The last size key includes a colon because there was a faculty member at MSUM
+# whose list name was "Sizer" and "Size" without the colon matches that.
+# The first key contains a colon because there was other text in one course
+# that contained the word "Enrolled"
+SIZE_KEYS = ['Enrolled:', 'Size:']
 
 TUITION_COURSE_KEYS = [
     'Tuition -resident',
@@ -77,7 +94,7 @@ DESTINATION_DIR_BASE = 'results'
 LATEST = 'latest'
 
 
-def get_subject_list(year_term):
+def get_subject_list(params):
     """
     Scrape the list of subjects (aka course rubrics, e.g. PHYS or BCBT) for
     the given year/term.
@@ -89,7 +106,7 @@ def get_subject_list(year_term):
         The year and term for which the list is desired. This should follow
         the "fiscal year" format, in which YYYY3 is the fall of fiscal year
         YYYY, YYYY5 is the spring of fiscal year YYYY and summer is...well,
-        summer is something. No idea what.
+        summer is something. No idea what. Found out! Summer is YYYY1.
 
     Returns
     -------
@@ -97,10 +114,12 @@ def get_subject_list(year_term):
     list
         List of course rubrics as strings.
     """
-    result = requests.get(URL_ROOT)
+    print(params)
+    print(URL_ROOT)
+    result = requests.get(URL_ROOT.format(**params))
     soup = BeautifulSoup(result.text, "lxml")
     select_box = soup.find('select', id='subject')
-    subjects = select_box.find_all('option', class_=year_term)
+    subjects = select_box.find_all('option', class_=params['year_term'])
     subject_str = [s['value'] for s in subjects]
     return subject_str
 
@@ -207,13 +226,16 @@ def scrape_class_data_from_results_table(page_content, page_type='search'):
     return table
 
 
-def class_list_for_subject(subject, year_term='20153'):
+def class_list_for_subject(params):
     """
     Return a table with one row for each class offered in a subject (aka
     course rubric).
 
     Parameters
     ----------
+
+    params : dict
+        Dictionary of parameters for substitution in URLs.
 
     subject : str
         The course rubric (aka subject) for which the list of courses is
@@ -232,19 +254,32 @@ def class_list_for_subject(subject, year_term='20153'):
     """
 
     # Get and parse the course list for this subject
-    list_url = SUBJECT_SEARCH_URL.format(subj=subject, year_term=year_term)
+    list_url = SUBJECT_SEARCH_URL.format(**params)
     result = requests.get(list_url)
     return scrape_class_data_from_results_table(result.text)
 
 
-def class_list_for_cid(cid, year_term):
-    course_url = COURSE_DETAIL_URL.format(course_id=cid, year_term=year_term)
+def class_list_for_cid(params):
+    """
+    Return a table with one row for each class offered in a subject (aka
+    course rubric).
+
+    This gets that information in a sort of dumb way by scraping it from
+    the course detail page.
+
+    Parameters
+    ----------
+
+    params : dict
+        Dictionary of parameters for substitution in URLs.
+    """
+    course_url = COURSE_DETAIL_URL.format(**params)
     result = requests.get(course_url)
     return scrape_class_data_from_results_table(result.text,
                                                 page_type='detail')
 
 
-def course_detail(cid, year_term='20155'):
+def course_detail(params):
     """
     Parse enrollment size information from detail page for a course.
 
@@ -274,14 +309,15 @@ def course_detail(cid, year_term='20155'):
         return element.getparent().text_content().split(':')[1].strip()
 
     # Get and parse the course detail page.
-    course_url = COURSE_DETAIL_URL.format(course_id=cid, year_term=year_term)
+    course_url = COURSE_DETAIL_URL.format(**params)
     result = requests.get(course_url)
     lxml_parsed = lxml.html.fromstring(result.text)
 
     # Check for an error in the page text, and return sizes of -1 to indicate
     # error.
     if 'System Error' in result.text:
-        print("Errored on {}".format(cid))
+        print("Errored on {}".format(params['course_id']))
+        print("URL: ", course_url)
         return {k: -1 for k in SIZE_KEYS}
 
     if TUITION_PER_CREDIT_KEYS[0] in result.text:
@@ -352,6 +388,10 @@ if __name__ == '__main__':
     parser.add_argument('--cid-list', action='store',
                         help='CSV that has at least two columns, "ID #", a '
                         'course ID number, and "year_term" a year/term code.')
+    parser.add_argument('--campus-id', action='store', type=int,
+                        default='72',
+                        help='Two digit code number for the campus data '
+                        'should be gathered for.')
     args = parser.parse_args()
 
     year_term = args.year_term
@@ -365,9 +405,16 @@ if __name__ == '__main__':
                            '--year-term and --cid-list')
     print(year_term)
 
+    # Define dict used for passing parameters. Values will mostly be
+    # filled in later. Make sure campus_id is an integer because we
+    # need to do some integer formatting on it.
+    url_params = dict(year_term=None, subject=None,
+                      course_id=None, campus_id=args.campus_id)
+
     if year_term:
+        url_params['year_term'] = args.year_term
         # Grab the list of subjects for this year/term
-        subjects = get_subject_list(args.year_term)
+        subjects = get_subject_list(url_params)
         source_list = subjects
 
     if cid_list:
@@ -385,6 +432,10 @@ if __name__ == '__main__':
     formatted_datetime = datetime.datetime(*now[:-3]).isoformat()
     formatted_datetime = formatted_datetime.replace(':', '-')
     destination = '-'.join([DESTINATION_DIR_BASE, formatted_datetime])
+    if args.campus_id != 72:
+        # Sorry other campuses, you get separate folders.
+        p = Path(str(args.campus_id)) / destination
+        destination = str(p)
 
     # Make the directory
     try:
@@ -402,9 +453,13 @@ if __name__ == '__main__':
         # from which most of the course information is derived.
         try:
             if year_term:
-                table = class_list_for_subject(source, year_term=year_term)
+                url_params['year_term'] = year_term
+                url_params['subject'] = source
+                table = class_list_for_subject(url_params)
             elif cid_list:
-                table = class_list_for_cid(source[0], source[1])
+                url_params['year_term'] = source[1]
+                url_params['course_id'] = source[0]
+                table = class_list_for_cid(url_params)
         except IndexError:
             bads.append(source)
             print("     Failed!")
@@ -420,16 +475,18 @@ if __name__ == '__main__':
         timestamps = []
 
         use_year_term = year_term or source[1]
+        url_params['year_term'] = use_year_term
         # Obtain the enrollment and enrollment cap, and add a timestamp.
         for an_id in IDs:
-            size_info = course_detail(an_id, year_term=use_year_term)
+            url_params['course_id'] = an_id
+            size_info = course_detail(url_params)
             for k, v in size_info.items():
                 results[k].append(v)
             timestamps.append(time.time())
 
         # Add columns from course detail
         for k in SIZE_KEYS:
-            table.add_column(Column(name=k, data=results[k], dtype=np.int),
+            table.add_column(Column(name=k, data=results[k], dtype=int),
                              index=8)
 
         for k in EXTRA_COLUMNS:
