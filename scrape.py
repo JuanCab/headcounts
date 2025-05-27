@@ -140,7 +140,7 @@ def decrap_item(item):
     no_linebreaks = remove_nbsp.replace('\n', '')
     no_linebreaks = no_linebreaks.replace('\r', '')
     no_tabs = no_linebreaks.replace('\t', '')
-    less_spaces = re.sub('\s+', ' ', no_tabs)
+    less_spaces = re.sub(r'\s+', ' ', no_tabs)
     return less_spaces.strip()
 
 
@@ -365,7 +365,7 @@ def course_detail(params):
     # we need, which is sandwiched between two divs that contain text that is
     # easy to find? Note the actual text is not in any element, not even a <p>.
     all_the_text = lxml_parsed.text_content()
-    matches = re.search('.*Course Level\s+(\w+)\s+(Description|General/Liberal|Lectures/Labs|Corequisites|Add To Wait List|Minnesota Transfer Curriculum Goal|Non-Course Prerequisites)',
+    matches = re.search(r'.*Course Level\s+(\w+)\s+(Description|General/Liberal|Lectures/Labs|Corequisites|Add To Wait List|Minnesota Transfer Curriculum Goal|Non-Course Prerequisites)',
                         all_the_text)
 
     # Oh ha, ha, turns out any number of things can follow Course Level.
