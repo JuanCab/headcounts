@@ -86,10 +86,10 @@ am.
 | 0076 | Metropolitan State University |
 | 0305 | Minneapolis Community and Technical College |
 | 0213 | Minnesota State College Southeast |
-| 0142 | Minnesota State Community and TechnicalCollege |
+| 0142 | Minnesota State Community and Technical College |
 | 0072 | Minnesota State University Moorhead |
 | 0071 | Minnesota State University, Mankato |
-| 0209 | Minnesota West Community and TechnicalCollege |
+| 0209 | Minnesota West Community and Technical College |
 | 0156 | Normandale Community College |
 | 0153 | North Hennepin Community College |
 | 0303 | Northland Community and Technical College
